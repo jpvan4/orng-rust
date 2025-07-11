@@ -4,16 +4,17 @@ use serde::{Deserialize, Deserializer};
 
 // pub const THREAD_NONCE_START: u32 = 0;
 
-fn target_from_hex<'de, D>(deserializer: D) -> Result<u32, D::Error>
+fn target_from_hex<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: Deserializer<'de>,
 {
     let hex: String = Deserialize::deserialize(deserializer)?;
-    hex::decode(hex)
-        .map_err(serde::de::Error::custom)?
-        .try_into()
-        .map(u32::from_le_bytes)
-        .map_err(|_| serde::de::Error::custom("Invalid target length"))
+    let bytes = hex::decode(hex).map_err(serde::de::Error::custom)?;
+    if bytes.len() != 8 {
+        return Err(serde::de::Error::custom("Target must be 8 bytes"));
+    }
+    let arr: [u8; 8] = bytes.try_into().unwrap();
+    Ok(u64::from_le_bytes(arr))
 }
 
 // fn target_from_hex<'de, D>(deserializer: D) -> Result<u32, D::Error>
@@ -48,7 +49,7 @@ pub struct Job {
     #[serde(rename = "seed_hash", with = "hex")]
     pub seed: Vec<u8>,
     #[serde(deserialize_with = "target_from_hex")]
-    pub target: u32,
+    pub target: u64,
 }
 
 impl Job {

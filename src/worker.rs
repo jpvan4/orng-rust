@@ -15,7 +15,7 @@ pub struct Worker {
 }
 impl Worker {
     #[tracing::instrument(skip(job))]
-    pub fn init(job: Job, num_threads: NonZeroUsize, fast: bool) -> Self {
+    pub fn init(job: Job, num_threads: NonZeroUsize, light: bool) -> Self {
         let (share_tx, share_rx) = mpsc::channel();
         let (job_tx, job_rx) = channel(job.clone());
 
