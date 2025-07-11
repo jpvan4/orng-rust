@@ -57,7 +57,7 @@ impl Job {
         if self.target == 0 {
             u64::MAX
         } else {
-            self.target
+            self.target as u64
         }
     }
 
@@ -95,3 +95,4 @@ impl Job {
         }
     }
 }
+
