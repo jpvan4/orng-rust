@@ -13,4 +13,5 @@ core_affinity = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 watch = "0.2"
+
 randomx-rs = "1.4"
