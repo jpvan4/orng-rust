@@ -1,49 +1,16 @@
-# Steps to Create a GitHub Repository and Upload Your Rust Project
+[package]
+name = "orng-rust"
+version = "0.1.0"
+edition = "2021"
 
-1. **Create a GitHub account** if you don't already have one at https://github.com/
-
-2. **Create a new repository**:
-    - Click the "+" icon in the top right corner
-    - Select "New repository"
-    - Name it (e.g., "orng-rust")
-    - Add a description (optional)
-    - Choose public or private
-    - Click "Create repository"
-
-3. **Initialize git in your local project**:
-    ```
-    cd /home/bun/orng-rust
-    git init
-    ```
-
-4. **Create a .gitignore file** for Rust:
-    ```
-    curl -s https://raw.githubusercontent.com/github/gitignore/master/Rust.gitignore -o .gitignore
-    ```
-
-5. **Add your files and commit**:
-    ```
-    git add .
-    git commit -m "Initial commit"
-    ```
-
-6. **Connect to the remote repository**:
-    ```
-    git remote add origin https://github.com/YOUR-USERNAME/orng-rust.git
-    ```
-
-7. **Push your code**:
-    ```
-    git push -u origin main
-    ```
-    (Use `master` instead of `main` if your default branch is named "master")
-
-8. **Create a README.md file** (optional but recommended):
-    ```
-    echo "# ORNG Rust" > README.md
-    git add README.md
-    git commit -m "Add README"
-    git push
-    ```
-
-Your Rust project should now be uploaded to GitHub!
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = { version = "0.4", features = ["serde"] }
+obfstr = "0.3"
+core_affinity = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+watch = "0.2"
+randomx-rs = "1.4"
