@@ -1,15 +1,12 @@
 use crate::{job::Job, share::Share};
-use rust_randomx::{Context, Hasher};
+use core_affinity;
+use randomx_rs::{RandomXCache, RandomXDataset, RandomXFlag, RandomXVM};
 use std::{
     num::NonZeroUsize,
-    sync::{
-        mpsc::{self, Receiver},
-        Arc,
-    },
+    sync::mpsc::{self, Receiver},
     thread,
-    time::{self, Instant},
+    time::Instant,
 };
-use core_affinity;
 // Import the specific types from watch crate
 use watch::{channel, WatchSender};
 pub struct Worker {
@@ -18,17 +15,23 @@ pub struct Worker {
 }
 impl Worker {
     #[tracing::instrument(skip(job))]
-    pub fn init(job: Job, num_threads: NonZeroUsize, fast: bool) -> Self {
+    pub fn init(job: Job, num_threads: NonZeroUsize, light: bool) -> Self {
         let (share_tx, share_rx) = mpsc::channel();
         let (job_tx, job_rx) = channel(job.clone());
-        let context = Arc::new(Context::new(&job.seed, fast));
+
+        let mut flags = RandomXFlag::get_recommended_flags()
+            | RandomXFlag::FLAG_JIT
+            | RandomXFlag::FLAG_HARD_AES;
+        if !light {
+            flags |= RandomXFlag::FLAG_FULL_MEM;
+        }
+
         let cores = core_affinity::get_core_ids().unwrap_or_default();
         let (hashrate_tx, hashrate_rx) = mpsc::channel();
         for i in 0..num_threads.get() {
             let core_id = cores.get(i % cores.len()).cloned();
             let share_tx = share_tx.clone();
             let mut job_rx = job_rx.clone();
-            let context = Arc::clone(&context);
             let hashrate_tx = hashrate_tx.clone();
             let thread_nonce_start = (i as u32) * (u32::MAX / num_threads.get() as u32);
             let thread_nonce_end = thread_nonce_start + (u32::MAX / num_threads.get() as u32);
@@ -37,23 +40,44 @@ impl Worker {
                     core_affinity::set_for_current(core);
                     tracing::info!("Thread {i} pinned to core {:?}", core.id);
                 }
-                let mut hasher = Hasher::new(Arc::clone(&context));
+                let mut cache = RandomXCache::new(flags, &job_rx.get().seed).expect("cache");
+                let mut dataset = if flags.contains(RandomXFlag::FLAG_FULL_MEM) {
+                    Some(RandomXDataset::new(flags, cache.clone(), 0).expect("dataset"))
+                } else {
+                    None
+                };
+                let mut vm =
+                    RandomXVM::new(flags, Some(cache.clone()), dataset.clone()).expect("vm");
                 let mut job = job_rx.get().clone();
-                let mut difficulty = job.difficulty();
+                let mut target = job.difficulty();
                 let mut nonce = thread_nonce_start;
                 let mut accepted = 0;
                 let mut hashes = 0;
                 let mut last_report = Instant::now();
-                
-                tracing::debug!("Thread {i} starting with difficulty: {}, nonce range: {}-{}", difficulty, thread_nonce_start, thread_nonce_end);
+
+                tracing::debug!(
+                    "Thread {i} starting with target: {}, nonce range: {}-{}",
+                    target,
+                    thread_nonce_start,
+                    thread_nonce_end
+                );
                 loop {
                     if let Some(new_job) = job_rx.get_if_new() {
                         if new_job.seed != job.seed {
-                            hasher = Hasher::new(Arc::new(Context::new(&new_job.seed, fast)));
+                            cache = RandomXCache::new(flags, &new_job.seed).expect("cache");
+                            vm.reinit_cache(cache.clone()).ok();
+                            if flags.contains(RandomXFlag::FLAG_FULL_MEM) {
+                                dataset = Some(
+                                    RandomXDataset::new(flags, cache.clone(), 0).expect("dataset"),
+                                );
+                                if let Some(ref d) = dataset {
+                                    vm.reinit_dataset(d.clone()).ok();
+                                }
+                            }
                             tracing::debug!("Thread {i} reinitialized context with new job seed");
                         }
                         job = new_job;
-                        difficulty = job.difficulty();
+                        target = job.difficulty();
                         nonce = thread_nonce_start;
                         accepted = 0;
                         last_report = Instant::now();
@@ -61,7 +85,7 @@ impl Worker {
                     // Inside the worker thread loop:
                     if nonce <= thread_nonce_end {
                         hashes += 1;
-                        if let Some(share) = job.next_share(&mut hasher, nonce, difficulty) {
+                        if let Some(share) = job.next_share(&vm, nonce, target) {
                             accepted += 1;
                             tracing::debug!("Found share at nonce: {}", nonce);
                             if share_tx.send(share).is_err() {
@@ -75,7 +99,11 @@ impl Worker {
                     if last_report.elapsed().as_secs() >= 10 {
                         let hashrate = hashes as f64 / 10.0;
                         hashrate_tx.send(hashrate).unwrap_or(());
-                        tracing::info!("Thread {i} - Hashrate: {:.2} H/s, Shares: {}", hashrate, accepted);
+                        tracing::info!(
+                            "Thread {i} - Hashrate: {:.2} H/s, Shares: {}",
+                            hashrate,
+                            accepted
+                        );
                         hashes = 0;
                         last_report = Instant::now();
                     }
