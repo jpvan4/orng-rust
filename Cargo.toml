@@ -14,3 +14,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 watch = "0.2"
 randomx-rs = "1.4"
+thiserror = "1"
+native-tls = "0.2"

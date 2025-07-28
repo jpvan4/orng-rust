@@ -1,9 +1,9 @@
 use clap::Parser;
+use obfstr::obfstr;
 
 
-use orng_rust::{Stratum, Worker};
+use orng_rust::{Error, Result, Stratum, Worker};
 use std::{
-    io,
     num::NonZeroUsize,
     time::{Duration, Instant},
 };
@@ -32,7 +32,7 @@ fn all_threads() -> NonZeroUsize {
     std::thread::available_parallelism().unwrap()
 }
 
-fn main() -> io::Result<()> {
+fn run() -> Result<()> {
     tracing_subscriber::fmt()
         .pretty()
         .with_max_level(tracing::Level::DEBUG)
@@ -56,7 +56,17 @@ fn main() -> io::Result<()> {
 
 
     let mut stratum = Stratum::login(&url, &user, &pass)?;
-    let worker = Worker::init(stratum.try_recv_job().unwrap(), threads, light);
+    let first_job = loop {
+        match stratum.try_recv_job() {
+            Ok(job) => break job,
+            Err(Error::Channel(ref msg)) if msg == "Channel is empty" => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                continue;
+            }
+            Err(e) => return Err(Error::Stratum(format!("Failed to get first job: {}", e))),
+        }
+    };
+    let worker = Worker::init(first_job, threads, light)?;
     let mut timer = Instant::now();
 
     loop {
@@ -72,5 +82,12 @@ fn main() -> io::Result<()> {
             stratum.keep_alive()?;
             timer = Instant::now();
         }
+    }
+}
+
+fn main() {
+    if let Err(e) = run() {
+        tracing::error!("Application error: {}", e);
+        std::process::exit(1);
     }
 }
