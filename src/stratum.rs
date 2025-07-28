@@ -1,14 +1,18 @@
 mod rpc;
 
+
+
 use crate::{error::{Error, Result}, job::Job, share::Share};
+
 use rpc::{
     request::{KeepAlivedParams, LoginParams, Request, SubmitParams},
     response::{LoginResult, Response, StatusResult},
 };
 use serde::Deserialize;
 use std::{
-    io::{self, BufReader, BufWriter},
+    io::{BufReader, BufWriter},
     net::TcpStream,
+
     sync::{mpsc::{self, Receiver}, Arc, Mutex},
     thread,
 };
@@ -100,6 +104,7 @@ impl Stratum {
                 nonce: share.nonce,
                 result: share.hash,
             }),
+
         ).map_err(Error::from)
     }
     pub fn keep_alive(&mut self) -> Result<()> {
@@ -108,6 +113,7 @@ impl Stratum {
             &Request::<KeepAlivedParams>::new(KeepAlivedParams {
                 id: self.login_id.clone(),
             }),
+
         ).map_err(Error::from)
     }
     pub fn try_recv_job(&self) -> Result<Job> {

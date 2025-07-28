@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer};
 
 // pub const THREAD_NONCE_START: u32 = 0;
 
+
 fn target_from_hex<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
 where
     D: Deserializer<'de>,
@@ -50,16 +51,24 @@ pub struct Job {
     pub blob: Vec<u8>,
     #[serde(rename = "seed_hash", with = "hex")]
     pub seed: Vec<u8>,
-    #[serde(deserialize_with = "target_from_hex")]
-    pub target: u64,
+    #[serde(deserialize_with = "target_from_hex_vec")]
+    pub target: Vec<u8>,
 }
 
 impl Job {
     pub fn difficulty(&self) -> u64 {
-        if self.target == 0 {
-            u64::MAX
-        } else {
-            self.target as u64
+        match self.target.len() {
+            4 => {
+                let mut arr = [0u8; 4];
+                arr.copy_from_slice(&self.target[..4]);
+                u32::from_le_bytes(arr) as u64
+            }
+            8 => {
+                let mut arr = [0u8; 8];
+                arr.copy_from_slice(&self.target[..8]);
+                u64::from_le_bytes(arr)
+            }
+            _ => u64::MAX,
         }
     }
 
@@ -86,7 +95,7 @@ impl Job {
                 "Nonce: {}, Hash val: {}, Target: {}",
                 nonce,
                 hash_val,
-                self.target
+                hex::encode(&self.target)
             );
         }
 
@@ -97,4 +106,3 @@ impl Job {
         }
     }
 }
-
