@@ -1,4 +1,6 @@
 use clap::Parser;
+use obfstr::obfstr;
+
 
 use orng_rust::{Error, Result, Stratum, Worker};
 use std::{

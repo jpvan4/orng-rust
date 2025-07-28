@@ -4,13 +4,20 @@ use serde::{Deserialize, Deserializer};
 
 // pub const THREAD_NONCE_START: u32 = 0;
 
-fn target_from_hex_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
+
+fn target_from_hex<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
 where
     D: Deserializer<'de>,
 {
     let hex: String = Deserialize::deserialize(deserializer)?;
     let bytes = hex::decode(hex).map_err(serde::de::Error::custom)?;
-    Ok(bytes)
+    if bytes.len() != 8 {
+        return Err(serde::de::Error::custom("Target must be 8 bytes"));
+    }
+    let arr: [u8; 8] = bytes
+        .try_into()
+        .map_err(|_| serde::de::Error::custom("Invalid target length"))?;
+    Ok(u64::from_le_bytes(arr))
 }
 
 // fn target_from_hex<'de, D>(deserializer: D) -> Result<u32, D::Error>
