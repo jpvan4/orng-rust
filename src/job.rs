@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer};
 
 // pub const THREAD_NONCE_START: u32 = 0;
 
-fn target_from_hex<'de, D>(deserializer: D) -> Result<u64, D::Error>
+fn target_from_hex<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -13,7 +13,9 @@ where
     if bytes.len() != 8 {
         return Err(serde::de::Error::custom("Target must be 8 bytes"));
     }
-    let arr: [u8; 8] = bytes.try_into().unwrap();
+    let arr: [u8; 8] = bytes
+        .try_into()
+        .map_err(|_| serde::de::Error::custom("Invalid target length"))?;
     Ok(u64::from_le_bytes(arr))
 }
 
